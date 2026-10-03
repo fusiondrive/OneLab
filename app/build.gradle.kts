@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.pigerzhu.onelab"
-        minSdk = 33
+        minSdk = 32
         targetSdk = 36
         versionCode = 11
         versionName = "1.3"

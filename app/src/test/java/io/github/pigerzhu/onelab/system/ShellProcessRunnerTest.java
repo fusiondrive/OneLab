@@ -10,6 +10,10 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
 public class ShellProcessRunnerTest {
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
     @Test
     public void capturesSuccessfulOutput() {
         Shell.ProcessResult result = Shell.runProcess(
@@ -21,8 +25,11 @@ public class ShellProcessRunnerTest {
 
     @Test
     public void drainsOutputLargerThanProcessPipe() {
+        String cmd = isWindows()
+                ? "for /L %i in (1,1,20000) do @echo 01234567890123456789"
+                : "yes 01234567890123456789 | head -n 20000";
         Shell.ProcessResult result = Shell.runProcess(
-                command("for /L %i in (1,1,20000) do @echo 01234567890123456789"),
+                command(cmd),
                 TimeUnit.SECONDS.toMillis(10));
 
         assertTrue(result.completedSuccessfully());
@@ -32,8 +39,9 @@ public class ShellProcessRunnerTest {
     @Test
     public void timesOutWithoutWaitingForProcessExit() {
         long started = System.nanoTime();
+        String cmd = isWindows() ? "ping -n 6 127.0.0.1 >nul" : "sleep 5";
         Shell.ProcessResult result = Shell.runProcess(
-                command("ping -n 6 127.0.0.1 >nul"), 100);
+                command(cmd), 100);
         long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
         assertFalse(result.completedSuccessfully());
@@ -42,6 +50,9 @@ public class ShellProcessRunnerTest {
     }
 
     private static java.util.List<String> command(String command) {
-        return Arrays.asList("cmd.exe", "/d", "/c", command);
+        if (isWindows()) {
+            return Arrays.asList("cmd.exe", "/d", "/c", command);
+        }
+        return Arrays.asList("sh", "-c", command);
     }
 }

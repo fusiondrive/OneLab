@@ -28,7 +28,7 @@ public final class PredictiveBackController {
     private final BooleanSupplier transitionRunning;
     private final Runnable prepareBackGesture;
     private final Runnable backAction;
-    private final OnBackInvokedCallback callback;
+    private final Object callback;
 
     private View gestureView;
     private View gesturePreview;
@@ -45,6 +45,9 @@ public final class PredictiveBackController {
             Runnable prepareBackGesture,
             Runnable backAction
     ) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return null;
+        }
         return new PredictiveBackController(
                 activity,
                 currentView,
@@ -69,54 +72,36 @@ public final class PredictiveBackController {
         this.transitionRunning = transitionRunning;
         this.prepareBackGesture = prepareBackGesture;
         this.backAction = backAction;
-        callback = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-                ? animationCallback()
-                : this::invokeBack;
-        activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            callback = Api34Impl.createAnimationCallback(this);
+        } else {
+            callback = Api33Impl.createInvokedCallback(this::invokeBack);
+        }
+        Api33Impl.registerCallback(activity, callback);
     }
 
     public void unregister() {
-        activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(callback);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && callback != null) {
+            Api33Impl.unregisterCallback(activity, callback);
+        }
     }
 
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    private OnBackAnimationCallback animationCallback() {
-        return new OnBackAnimationCallback() {
-            @Override
-            public void onBackStarted(BackEvent backEvent) {
-                prepareBackGesture.run();
-                if (transitionRunning.getAsBoolean()) return;
-                gestureView = currentView.get();
-                gesturePreview = previewView.get();
-                if (gestureView != null) {
-                    gestureView.animate().cancel();
-                    gestureStartTranslation = gestureView.getTranslationX();
-                    gestureStartScale = gestureView.getScaleX();
-                }
-                if (gesturePreview != null) {
-                    gesturePreview.animate().cancel();
-                    gesturePreview.setVisibility(View.VISIBLE);
-                    previewStartTranslation = gesturePreview.getTranslationX();
-                    previewStartAlpha = gesturePreview.getAlpha();
-                }
-            }
-
-            @Override
-            public void onBackProgressed(BackEvent backEvent) {
-                applyProgress(backEvent.getProgress());
-            }
-
-            @Override
-            public void onBackCancelled() {
-                resetGestureView(true);
-            }
-
-            @Override
-            public void onBackInvoked() {
-                invokeBack();
-            }
-        };
+    private void onBackStarted() {
+        prepareBackGesture.run();
+        if (transitionRunning.getAsBoolean()) return;
+        gestureView = currentView.get();
+        gesturePreview = previewView.get();
+        if (gestureView != null) {
+            gestureView.animate().cancel();
+            gestureStartTranslation = gestureView.getTranslationX();
+            gestureStartScale = gestureView.getScaleX();
+        }
+        if (gesturePreview != null) {
+            gesturePreview.animate().cancel();
+            gesturePreview.setVisibility(View.VISIBLE);
+            previewStartTranslation = gesturePreview.getTranslationX();
+            previewStartAlpha = gesturePreview.getAlpha();
+        }
     }
 
     private void applyProgress(float progress) {
@@ -206,5 +191,50 @@ public final class PredictiveBackController {
 
     private float lerp(float start, float end, float progress) {
         return start + ((end - start) * progress);
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private static class Api33Impl {
+        static Object createInvokedCallback(Runnable backAction) {
+            return (OnBackInvokedCallback) backAction::run;
+        }
+
+        static void registerCallback(Activity activity, Object callback) {
+            activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                    (OnBackInvokedCallback) callback);
+        }
+
+        static void unregisterCallback(Activity activity, Object callback) {
+            activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(
+                    (OnBackInvokedCallback) callback);
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private static class Api34Impl {
+        static Object createAnimationCallback(PredictiveBackController controller) {
+            return new OnBackAnimationCallback() {
+                @Override
+                public void onBackStarted(BackEvent backEvent) {
+                    controller.onBackStarted();
+                }
+
+                @Override
+                public void onBackProgressed(BackEvent backEvent) {
+                    controller.applyProgress(backEvent.getProgress());
+                }
+
+                @Override
+                public void onBackCancelled() {
+                    controller.resetGestureView(true);
+                }
+
+                @Override
+                public void onBackInvoked() {
+                    controller.invokeBack();
+                }
+            };
+        }
     }
 }

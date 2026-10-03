@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -165,14 +166,16 @@ public class MainActivity extends Activity {
         splitViewRatioScreen = new SplitViewRatioScreen(this, ui, settings, appList);
         diagnosticsScreen = new DiagnosticsScreen(this, ui);
         donationScreen = new DonationScreen(this, ui);
-        predictiveBackController = PredictiveBackController.register(
-                this,
-                () -> currentPageView,
-                () -> predictiveParentPreviewEnabled ? backPageStack.peek() : null,
-                pageTransitions::isRunning,
-                this::interruptPageTransitionForBack,
-                this::handleBackNavigation
-        );
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            predictiveBackController = PredictiveBackController.register(
+                    this,
+                    () -> currentPageView,
+                    () -> predictiveParentPreviewEnabled ? backPageStack.peek() : null,
+                    pageTransitions::isRunning,
+                    this::interruptPageTransitionForBack,
+                    this::handleBackNavigation
+            );
+        }
         largeScreenLayout = isLargeScreen(getResources().getConfiguration());
         buildNavigationShell();
         if (savedInstanceState != null
@@ -358,7 +361,9 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(card);
-        root.addView(languageCard());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            root.addView(languageCard());
+        }
         root.addView(donationScreen.entryCard(this::showDonationPage));
         root.addView(diagnosticsScreen.card());
     }
